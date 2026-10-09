@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+    <meta charset="UTF-8">
+    <title>Kohalik Lasketulemuste Tuvastaja</title>
+    <!-- Kaasame Tesseract.js kohaliku faili, mitte internetist -->
+    <script src="tesseract.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f7f6; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        #preview { max-width: 100%; display: none; margin-top: 10px; border: 1px solid #ccc; }
+        .result-box { background: #eef9f3; border: 1px solid #5cb85c; padding: 15px; border-radius: 4px; margin-top: 15px; }
+        #status { font-weight: bold; color: #0066cc; margin: 15px 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Lasketulemuste tuvastus (Kõik failid arvutis)</h2>
+    
+    <input type="file" id="imageInput" accept="image/*">
+    <div id="status">Ootan pilti...</div>
+
+    <h3>Eelvaade:</h3>
+    <img id="preview" src="#" alt="Eelvaade">
+
+    <h3>Tuvastatud tulemused:</h3>
+    <div id="finalResults" class="result-box">Laadi pilt, et näha tulemusi.</div>
+</div>
+
+<script>
+    const imageInput = document.getElementById('imageInput');
+    const preview = document.getElementById('preview');
+    const statusDiv = document.getElementById('status');
+    const finalResultsDiv = document.getElementById('finalResults');
+
+    imageInput.addEventListener('change', async function(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // Kuvame pildi eelvaate
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = 'block';
+
+        statusDiv.innerText = "Käivitan kohalikku tehisintellekti... Palun oota.";
+        finalResultsDiv.innerText = "Töötlen pilti kohalike failidega...";
+
+        try {
+            // LOOME TESSERACTI TÖÖRIISTA, MIS KASUTAB AINULT KOHALIKKE FAILE
+            const worker = await Tesseract.createWorker('eng', 1, {
+                workerPath: './worker.min.js', // Viide kohalikule taustafailile
+                langPath: '.',                  // Viide kaustale, kus asub eng.traineddata.gz
+                cacheMethod: 'none'            // Keelame veebist vahemällu laadimise
+            });
+
+            // Teeme pildituvastuse
+            const { data: { text } } = await worker.recognize(file);
+            
+            // Vabastame mälu
+            await worker.terminate();
+
+            statusDiv.innerText = "Tuvastamine edukalt lõpetatud ilma internetita!";
+            
+            // Lihtne otsing: kuvame kõik numbrid kujul X.X, mis pildilt leiti
+            const numbriteMuster = /[0-9][.,][0-9]/g;
+            const leitudNumbrid = text.match(numbriteMuster);
+
+            if (leitudNumbrid) {
+                finalResultsDiv.innerHTML = "<h4>Leitud lasketulemused:</h4><ul>" + 
+                    leitudNumbrid.map(num => `<li>${num.replace(',', '.')}</li>`).join('') + "</ul>";
+            } else {
+                finalResultsDiv.innerText = "Pildilt ei leitud ühtegi tulemust. Proovi selgemat pilti.";
+            }
+
+        } catch (error) {
+            statusDiv.innerText = "Viga kohalikul tuvastamisel!";
+            finalResultsDiv.innerText = error.message;
+            console.error(error);
+        }
+    });
+</script>
+
+</body>
+</html>
