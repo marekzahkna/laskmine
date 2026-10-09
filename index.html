@@ -2,82 +2,142 @@
 <html lang="et">
 <head>
     <meta charset="UTF-8">
-    <title>Kohalik Lasketulemuste Tuvastaja</title>
-    <!-- Kaasame Tesseract.js kohaliku faili, mitte internetist -->
+    <title>Lasketulemuste Tuvastaja</title>
+    <!-- Kasutame Sinu üleslaetud kohalikku teeki -->
     <script src="tesseract.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f7f6; }
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        #preview { max-width: 100%; display: none; margin-top: 10px; border: 1px solid #ccc; }
-        .result-box { background: #eef9f3; border: 1px solid #5cb85c; padding: 15px; border-radius: 4px; margin-top: 15px; }
+        #preview { max-width: 100%; margin-top: 10px; border: 1px solid #ccc; border-radius: 4px; }
         #status { font-weight: bold; color: #0066cc; margin: 15px 0; }
+        .result-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .result-table th, .result-table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        .result-table th { background-color: #4CAF50; color: white; }
+        .result-table tr:nth-child(even) { background-color: #f2f2f2; }
+        .total-row { font-weight: bold; background-color: #eef9f3 !important; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Lasketulemuste tuvastus (Kõik failid arvutis)</h2>
+    <h2>Lasketulemuste tuvastus v1.2</h2>
     
     <input type="file" id="imageInput" accept="image/*">
     <div id="status">Ootan pilti...</div>
 
     <h3>Eelvaade:</h3>
-    <img id="preview" src="#" alt="Eelvaade">
+    <img id="preview" src="#" alt="Eelvaade" style="display:none;">
 
-    <h3>Tuvastatud tulemused:</h3>
-    <div id="finalResults" class="result-box">Laadi pilt, et näha tulemusi.</div>
+    <h3>Tuvastatud lasketulemused:</h3>
+    <div id="tableOutput">Tulemused ilmuvad siia...</div>
 </div>
 
 <script>
     const imageInput = document.getElementById('imageInput');
     const preview = document.getElementById('preview');
     const statusDiv = document.getElementById('status');
-    const finalResultsDiv = document.getElementById('finalResults');
+    const tableOutput = document.getElementById('tableOutput');
 
     imageInput.addEventListener('change', async function(event) {
         const file = event.target.files[0];
         if (!file) return;
 
-        // Kuvame pildi eelvaate
         preview.src = URL.createObjectURL(file);
         preview.style.display = 'block';
 
-        statusDiv.innerText = "Käivitan kohalikku tehisintellekti... Palun oota.";
-        finalResultsDiv.innerText = "Töötlen pilti kohalike failidega...";
+        statusDiv.innerText = "Analüüsin laskude tabelit... Palun oota.";
+        tableOutput.innerHTML = "Töötlen...";
 
         try {
-            // LOOME TESSERACTI TÖÖRIISTA, MIS KASUTAB AINULT KOHALIKKE FAILE
+            // Käivitame töötaja Sinu GitHubi üleslaetud abifailidega
             const worker = await Tesseract.createWorker('eng', 1, {
-                workerPath: './worker.min.js', // Viide kohalikule taustafailile
-                langPath: '.',                  // Viide kaustale, kus asub eng.traineddata.gz
-                cacheMethod: 'none'            // Keelame veebist vahemällu laadimise
+                workerPath: './worker.min.js',
+                langPath: '.',
+                cacheMethod: 'none'
             });
 
-            // Teeme pildituvastuse
+            // Palume Tessaractil otsida spetsiaalselt numbreid (valgemüra vähendamiseks)
+            await worker.setParameters({
+                tessedit_char_whitelist: '0123456789., \n'
+            });
+
             const { data: { text } } = await worker.recognize(file);
-            
-            // Vabastame mälu
             await worker.terminate();
 
-            statusDiv.innerText = "Tuvastamine edukalt lõpetatud ilma internetita!";
-            
-            // Lihtne otsing: kuvame kõik numbrid kujul X.X, mis pildilt leiti
-            const numbriteMuster = /[0-9][.,][0-9]/g;
-            const leitudNumbrid = text.match(numbriteMuster);
-
-            if (leitudNumbrid) {
-                finalResultsDiv.innerHTML = "<h4>Leitud lasketulemused:</h4><ul>" + 
-                    leitudNumbrid.map(num => `<li>${num.replace(',', '.')}</li>`).join('') + "</ul>";
-            } else {
-                finalResultsDiv.innerText = "Pildilt ei leitud ühtegi tulemust. Proovi selgemat pilti.";
-            }
+            statusDiv.innerText = "Tuvastamine edukalt lõpetatud!";
+            TöötleTekst(text);
 
         } catch (error) {
-            statusDiv.innerText = "Viga kohalikul tuvastamisel!";
-            finalResultsDiv.innerText = error.message;
-            console.error(error);
+            statusDiv.innerText = "Viga tuvastamisel!";
+            tableOutput.innerText = error.message;
         }
     });
+
+    function TöötleTekst(toorTekst) {
+        const read = toorTekst.split('\n');
+        let lasud = {};
+        
+        // Parandatud Regex: otsib ridade seest kindlalt järjekorranumbrit (1-5) ja sellele järgnevat tulemust (nt 9.6 või 5.6)
+        // See aitab ignoreerida ekraani allnurgas olevaid miinusmärgiga koordinaate ja muid suuri numbreid
+        const tabeliMuster = /^\s*([1-5])\s+([0-9][.,][0-9])/;
+
+        read.forEach(rida => {
+            const vaste = rida.trim().match(tabeliMuster);
+            if (vaste) {
+                const lasuNr = parseInt(vaste[1]);
+                const tulemus = parseFloat(vaste[2].replace(',', '.'));
+                // Salvestame ainult siis, kui see on loogiline lasketulemus (0.0 kuni 10.9)
+                if (tulemus <= 11.0) {
+                    lasud[lasuNr] = tulemus;
+                }
+            }
+        });
+
+        // Kui süsteem ei suutnud ridu otse tuvastada, proovime leida ekraanilt 5 järjestikust tulemust
+        if (Object.keys(lasud).length === 0) {
+            const koikKümnendmurdud = toorTekst.match(/[0-9][.,][0-9]/g);
+            if (koikKümnendmurdud) {
+                // Filtreerime välja loogilised tulemused ja paneme need järjekorda
+                let loendur = 1;
+                koikKümnendmurdud.forEach(num => {
+                    const väärtus = parseFloat(num.replace(',', '.'));
+                    if (väärtus <= 10.9 && loendur <= 5) {
+                        lasud[loendur] = väärtus;
+                        loendur++;
+                    }
+                });
+            }
+        }
+
+        // Koostame tulemuste tabeli
+        if (Object.keys(lasud).length > 0) {
+            let tabeliHtml = `<table class="result-table">
+                <tr><th>Lasu nr</th><th>Algne tulemus</th><th>Ümardatud (allapoole)</th></tr>`;
+            
+            let algneSumma = 0;
+            let ümardatudSumma = 0;
+
+            // Käime lasud 1 kuni 5 läbi
+            for (let i = 1; i <= 5; i++) {
+                let väärtus = lasud[i] !== undefined ? lasud[i] : "-";
+                let ümardatud = lasud[i] !== undefined ? Math.floor(lasud[i]) : "-";
+                
+                if (lasud[i] !== undefined) {
+                    algneSumma += väärtus;
+                    ümardatudSumma += ümardatud;
+                }
+
+                tabeliHtml += `<tr><td>${i}. lask</td><td>${väärtus}</td><td><strong>${ümardatud}</strong></td></tr>`;
+            }
+
+            tabeliHtml += `<tr class="total-row"><td>KOKKU</td><td>${algneSumma.toFixed(1)}</td><td>${ümardatudSumma}</td></tr>`;
+            tabeliHtml += `</table>`;
+            
+            tableOutput.innerHTML = tabeliHtml;
+        } else {
+            tableOutput.innerHTML = "<p style='color:red;'>Tabeli formaati ei suudetud tuvastada. Proovi teha ekraanist otsem ja lähemalt pilti, et ainult parempoolne tabel jääks kaadrisse.</p>";
+        }
+    }
 </script>
 
 </body>
