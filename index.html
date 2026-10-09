@@ -3,158 +3,150 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lasketulemuste Tuvastaja v1.5</title>
-    <script src="tesseract.min.js"></script>
+    <title>Lasketulemuste Arvutaja v1.8</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .version-tag { font-size: 0.85em; color: #777; background: #eaeaea; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 15px; }
-        #sourceCanvas, #rightColumnCanvas { max-width: 100%; margin-top: 10px; border: 1px solid #ccc; border-radius: 4px; display: block; }
-        #status { font-weight: bold; color: #0066cc; margin: 15px 0; }
-        .result-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        .result-table th, .result-table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 15px; background-color: #f4f7f6; color: #333; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 480px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); box-sizing: border-box; }
+        .version-tag { font-size: 0.8em; color: #777; background: #eaeaea; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 15px; }
+        
+        /* Klaviatuuri disain mobiilile */
+        .keyboard { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+        .key { background: #e9ecef; border: none; padding: 18px; font-size: 1.4em; font-weight: bold; border-radius: 8px; cursor: pointer; text-align: center; -webkit-tap-highlight-color: transparent; }
+        .key:active { background: #ced4da; }
+        .key.clear { background: #f8d7da; color: #721c24; }
+        .key.clear:active { background: #f5c6cb; }
+        
+        /* Tabeli disain */
+        .result-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 1.05em; }
+        .result-table th, .result-table td { border: 1px solid #ddd; padding: 10px; text-align: center; }
         .result-table th { background-color: #4CAF50; color: white; }
-        .result-table tr:nth-child(even) { background-color: #f2f2f2; }
-        .total-row { font-weight: bold; background-color: #eef9f3 !important; }
-        .hidden { display: none !important; }
+        .result-table tr:nth-child(even) { background-color: #f9f9f9; }
+        .total-row { font-weight: bold; background-color: #eef9f3 !important; font-size: 1.1em; }
+        
+        .input-preview { font-size: 1.1em; margin: 10px 0; font-weight: bold; color: #0066cc; min-height: 24px; text-align: center; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Lasketulemuste pildituvastus</h2>
-    <div class="version-tag">Rakenduse versioon: v1.5 (Tabeli poolitamine veergudeks)</div>
+    <h2>Lasketulemuste sisestaja</h2>
+    <div class="version-tag">Versioon: v1.8 (Kiirklaviatuur - 100% Töökindel)</div>
     
-    <br>
-    <p><i>Selle versiooni jaoks laadi üles ainult lasketabeli piirkond (puhas väljalõige tabelist).</i></p>
-    <input type="file" id="imageInput" accept="image/*">
-    <div id="status">Ootan puhast tabeli pilti...</div>
+    <!-- Kuvab pooleliolevat sisestust (nt "Hetkel sisestamisel: 9.") -->
+    <div id="inputPreview" class="input-preview">Alusta sisestamist numbritest...</div>
 
-    <div class="hidden">
-        <canvas id="sourceCanvas"></canvas>
+    <!-- TULEMUSTE TABEL -->
+    <table class="result-table">
+        <thead>
+            <tr>
+                <th>Lasu nr</th>
+                <th>Algne</th>
+                <th>Ümardatud (⬇)</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+            <!-- Täidetakse dünaamiliselt JavaScriptiga -->
+        </tbody>
+    </table>
+
+    <!-- LASKURI SPETSIAALNE SÕRMISTIK -->
+    <div class="keyboard">
+        <button class="key" onclick="lisaNumber(7)">7</button>
+        <button class="key" onclick="lisaNumber(8)">8</button>
+        <button class="key" onclick="lisaNumber(9)">9</button>
+        <button class="key" onclick="lisaNumber(4)">4</button>
+        <button class="key" onclick="lisaNumber(5)">5</button>
+        <button class="key" onclick="lisaNumber(6)">6</button>
+        <button class="key" onclick="lisaNumber(1)">1</button>
+        <button class="key" onclick="lisaNumber(2)">2</button>
+        <button class="key" onclick="lisaNumber(3)">3</button>
+        <button class="key clear" onclick="kustutaViimane()">C</button>
+        <button class="key" onclick="lisaNumber(0)">0</button>
+        <button class="key clear" onclick="tühjendaKõik()">Reset</button>
     </div>
-
-    <h3>Eraldatud tulemuste veerg (Ilma joonteta):</h3>
-    <canvas id="rightColumnCanvas"></canvas>
-
-    <h3>Tuvastatud lasketulemused:</h3>
-    <div id="tableOutput">Tulemused ilmuvad siia...</div>
 </div>
 
 <script>
-    const imageInput = document.getElementById('imageInput');
-    const sourceCanvas = document.getElementById('sourceCanvas');
-    const rightColumnCanvas = document.getElementById('rightColumnCanvas');
-    const statusDiv = document.getElementById('status');
-    const tableOutput = document.getElementById('tableOutput');
-
-    imageInput.addEventListener('change', function(event) {
-        const file = event.target.files;
-        if (!file) return;
-
-        statusDiv.innerText = "Töötlen tabeli jooni ja eraldan veergu...";
-        tableOutput.innerHTML = "Töötlen...";
-
-        const img = new Image();
-        img.src = URL.createObjectURL(file);
+    let sisestatudNumbrid = []; // Hoiab kõiki vajutatud nuppe järjest (nt [9, 6, 5, 6...])
+    
+    // Uuendab ekraanil olevat tabelit ja summasid reaalajas
+    function uuendaVaadet() {
+        const tableBody = document.getElementById('tableBody');
+        const inputPreview = document.getElementById('inputPreview');
         
-        img.onload = async function() {
-            const srcCtx = sourceCanvas.getContext('2d');
-            sourceCanvas.width = img.width;
-            sourceCanvas.height = img.height;
-            srcCtx.drawImage(img, 0, 0);
-
-            // ERALDAME VEERUD: Vertikaalne joon asub umbes 28% peal vasakult.
-            // Lõikame tulemuste veeru alates 30% laiusest kuni 85% laiuseni (jätame parempoolsed punktid '--' välja)
-            const startX = img.width * 0.30;
-            const targetWidth = img.width * 0.55;
-            const targetHeight = img.height; // Võtame terve tabeli kõrguse
-
-            rightColumnCanvas.width = targetWidth;
-            rightColumnCanvas.height = targetHeight;
-            const rightCtx = rightColumnCanvas.getContext('2d');
+        let lasud = [];
+        // Grupeerime numbrid kahe kaupa lasketulemusteks (nt 9 ja 6 -> 9.6)
+        for (let i = 0; i < sisestatudNumbrid.length; i += 2) {
+            let täisosa = sisestatudNumbrid[i];
+            let kümnendik = sisestatudNumbrid[i+1];
             
-            // Joonistame lõuendile ainult tulemuste veeru (ilma püstise jooneta ja ilma laskude numbriteta)
-            rightCtx.drawImage(sourceCanvas, startX, 0, targetWidth, targetHeight, 0, 0, targetWidth, targetHeight);
+            if (kümnendik !== undefined) {
+                lasud.push(parseFloat(`${täisosa}.${kümnendik}`));
+            } else {
+                // Kui kümnendikku veel pole, kuvame eelvaates, et sisestamine on pooleli
+                inputPreview.innerText = `Lask ${lasud.length + 1} pooleli: ${täisosa}.`;
+            }
+        }
 
-            statusDiv.innerText = "Veerg eraldatud! Tuvastan tulemused puhtalt pinnalt...";
+        if (sisestatudNumbrid.length % 2 === 0) {
+            inputPreview.innerText = lasud.length >= 5 ? "Kõik 5 lasku sisestatud!" : "Sisesta järgmine lask...";
+        }
 
-            // Saadame Tesseractile ainult selle puhta numbritulba
-            KäivitaTuvastus(rightColumnCanvas);
-        };
-    });
+        // Genereerime tabeli read 1 kuni 5 jaoks
+        let html = '';
+        let algneSumma = 0;
+        let ümardatudSumma = 0;
 
-    async function KäivitaTuvastus(canvasElement) {
-        try {
-            const worker = await Tesseract.createWorker('eng', 1, {
-                workerPath: './worker.min.js',
-                langPath: '.',
-                cacheMethod: 'none'
-            });
+        for (let i = 0; i < 5; i++) {
+            let väärtus = lasud[i];
+            let olemas = väärtus !== undefined;
+            let ümardatud = olemas ? Math.floor(väärtus) : 0;
 
-            // Kuna loeme ainult tulemusi, lubame rangelt ainult numbreid ja punkte/komasid ja reavahetust
-            await worker.setParameters({
-                tessedit_char_whitelist: '0123456789.\n',
-                tessedit_pageseg_mode: '6' // PSM 6: Eeldab ühte ühtset tekstiplokki/tulpa, sobib ideaalselt nimekirjadele
-            });
+            if (olemas) {
+                algneSumma += väärtus;
+                ümardatudSumma += ümardatud;
+            }
 
-            const { data: { text } } = await worker.recognize(canvasElement);
-            await worker.terminate();
+            html += `<tr>
+                <td><strong>${i + 1}. lask</strong></td>
+                <td>${olemas ? väärtus.toFixed(1) : '-'}</td>
+                <td><strong>${olemas ? ümardatud : '-'}</strong></td>
+            </tr>`;
+        }
 
-            statusDiv.innerText = "Tuvastamine edukalt lõpetatud!";
-            TöötlePuhtadNumbrid(text);
+        // Lisame kokkuvõtte rea
+        html += `<tr class="total-row">
+            <td>KOKKU</td>
+            <td>${algneSumma > 0 ? algneSumma.toFixed(1) : '-'}</td>
+            <td>${ümardatudSumma > 0 ? ümardatudSumma : '-'}</td>
+        </tr>`;
 
-        } catch (error) {
-            statusDiv.innerText = "Viga tuvastamisel!";
-            tableOutput.innerText = error.message;
+        tableBody.innerHTML = html;
+    }
+
+    // Kui vajutatakse numbriklahvi
+    function lisaNumber(nr) {
+        // Lubame sisestada maksimaalselt 5 lasku (ehk 10 numbrit kokku)
+        if (sisestatudNumbrid.length < 10) {
+            sisestatudNumbrid.push(nr);
+            uuendaVaadet();
         }
     }
 
-    function TöötlePuhtadNumbrid(toorTekst) {
-        // Otsime tekstist kõiki numbreid, mis on kujul X.X
-        const leitudNumbrid = toorTekst.match(/[0-9][.,][0-9]/g) || [];
-        
-        let lõplikudLasud = [];
-        leitudNumbrid.forEach(num => {
-            const väärtus = parseFloat(num.replace(',', '.'));
-            if (väärtus <= 10.9 && väärtus >= 0.0) {
-                lõplikudLasud.push(väärtus);
-            }
-        });
-
-        if (lõplikudLasud.length > 0) {
-            let tabeliHtml = `<table class="result-table">
-                <tr><th>Lasu nr</th><th>Algne tulemus</th><th>Ümardatud (allapoole)</th></tr>`;
-            
-            let algneSumma = 0;
-            let ümardatudSumma = 0;
-
-            // Kuvame kuni 5 lasku
-            for (let i = 0; i < 5; i++) {
-                let väärtus = lõplikudLasud[i];
-                let olemas = väärtus !== undefined;
-                let ümardatud = olemas ? Math.floor(väärtus) : 0;
-                
-                if (olemas) {
-                    algneSumma += väärtus;
-                    ümardatudSumma += ümardatud;
-                }
-
-                tabeliHtml += `<tr>
-                    <td>${i + 1}. lask</td>
-                    <td>${olemas ? väärtus.toFixed(1) : '-'}</td>
-                    <td><strong>${olemas ? ümardatud : '-'}</strong></td>
-                </tr>`;
-            }
-
-            tabeliHtml += `<tr class="total-row"><td>KOKKU</td><td>${algneSumma.toFixed(1)}</td><td>${ümardatudSumma}</td></tr>`;
-            tabeliHtml += `</table>`;
-            
-            tableOutput.innerHTML = tabeliHtml;
-        } else {
-            tableOutput.innerHTML = "<p style='color:red;'>Eraldatud veerust ei leitud ühtegi numbrit. Veendu, et üleslaetud tabeli pilt on terav ja otse.</p>";
-        }
+    // Kustutab viimati sisestatud ühe numbri (C nupp)
+    function kustutaViimane() {
+        sisestatudNumbrid.pop();
+        uuendaVaadet();
     }
+
+    // Kustutab terve tabeli tühjaks (Reset nupp)
+    function tühjendaKõik() {
+        sisestatudNumbrid = [];
+        uuendaVaadet();
+    }
+
+    // Käivitame tühja tabeli lehe laadimisel
+    uuendaVaadet();
 </script>
 
 </body>
