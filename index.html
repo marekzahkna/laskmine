@@ -2,12 +2,14 @@
 <html lang="et">
 <head>
     <meta charset="UTF-8">
-    <title>Lasketulemuste Tuvastaja</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lasketulemuste Tuvastaja v1.3</title>
     <!-- Kasutame Sinu üleslaetud kohalikku teeki -->
     <script src="tesseract.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .version-tag { font-size: 0.85em; color: #777; background: #eaeaea; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 15px; }
         #preview { max-width: 100%; margin-top: 10px; border: 1px solid #ccc; border-radius: 4px; }
         #status { font-weight: bold; color: #0066cc; margin: 15px 0; }
         .result-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
@@ -20,16 +22,19 @@
 <body>
 
 <div class="container">
-    <h2>Lasketulemuste tuvastus v1.2</h2>
+    <h2>Lasketulemuste pildituvastus</h2>
+    <!-- Versioonitähis, et näha brauseris kohe, milline kood töötab -->
+    <div class="version-tag">Rakenduse versioon: v1.3 (Parandatud tabeli filter)</div>
     
+    <br>
     <input type="file" id="imageInput" accept="image/*">
-    <div id="status">Ootan pilti...</div>
+    <div id="status">Ootan lasketulemuste pilti...</div>
 
     <h3>Eelvaade:</h3>
     <img id="preview" src="#" alt="Eelvaade" style="display:none;">
 
     <h3>Tuvastatud lasketulemused:</h3>
-    <div id="tableOutput">Tulemused ilmuvad siia...</div>
+    <div id="tableOutput">Tulemused ilmuvad siia pärast pildi valimist...</div>
 </div>
 
 <script>
@@ -45,7 +50,7 @@
         preview.src = URL.createObjectURL(file);
         preview.style.display = 'block';
 
-        statusDiv.innerText = "Analüüsin laskude tabelit... Palun oota.";
+        statusDiv.innerText = "Analüüsin lasketabelit... Palun oota.";
         tableOutput.innerHTML = "Töötlen...";
 
         try {
@@ -56,7 +61,7 @@
                 cacheMethod: 'none'
             });
 
-            // Palume Tessaractil otsida spetsiaalselt numbreid (valgemüra vähendamiseks)
+            // Lubame ainult numbreid ja kirjavahemärke, et tekstiprügi eemaldada
             await worker.setParameters({
                 tessedit_char_whitelist: '0123456789., \n'
             });
@@ -77,8 +82,7 @@
         const read = toorTekst.split('\n');
         let lasud = {};
         
-        // Parandatud Regex: otsib ridade seest kindlalt järjekorranumbrit (1-5) ja sellele järgnevat tulemust (nt 9.6 või 5.6)
-        // See aitab ignoreerida ekraani allnurgas olevaid miinusmärgiga koordinaate ja muid suuri numbreid
+        // Rangem filter: rida peab algama numbriga 1-5, millele järgneb tühik ja kümnendmurd (nt 9.6)
         const tabeliMuster = /^\s*([1-5])\s+([0-9][.,][0-9])/;
 
         read.forEach(rida => {
@@ -86,21 +90,21 @@
             if (vaste) {
                 const lasuNr = parseInt(vaste[1]);
                 const tulemus = parseFloat(vaste[2].replace(',', '.'));
-                // Salvestame ainult siis, kui see on loogiline lasketulemus (0.0 kuni 10.9)
+                // Kontrollime, et punktid jääksid reaalsuse piiridesse
                 if (tulemus <= 11.0) {
                     lasud[lasuNr] = tulemus;
                 }
             }
         });
 
-        // Kui süsteem ei suutnud ridu otse tuvastada, proovime leida ekraanilt 5 järjestikust tulemust
+        // Alternatiivne leidja juhuks, kui tabeli struktuur sai viga, kuid numbrid on olemas
         if (Object.keys(lasud).length === 0) {
-            const koikKümnendmurdud = toorTekst.match(/[0-9][.,][0-9]/g);
-            if (koikKümnendmurdud) {
-                // Filtreerime välja loogilised tulemused ja paneme need järjekorda
+            const koikKümnendmurrud = toorTekst.match(/[0-9][.,][0-9]/g);
+            if (koikKümnendmurrud) {
                 let loendur = 1;
-                koikKümnendmurdud.forEach(num => {
+                koikKümnendmurrud.forEach(num => {
                     const väärtus = parseFloat(num.replace(',', '.'));
+                    // Välistame lehe all nurgas olevad liiga suured numbrid (nt distantsid või koordinaadid)
                     if (väärtus <= 10.9 && loendur <= 5) {
                         lasud[loendur] = väärtus;
                         loendur++;
@@ -109,7 +113,7 @@
             }
         }
 
-        // Koostame tulemuste tabeli
+        // Koostame ilusa HTML tabeli
         if (Object.keys(lasud).length > 0) {
             let tabeliHtml = `<table class="result-table">
                 <tr><th>Lasu nr</th><th>Algne tulemus</th><th>Ümardatud (allapoole)</th></tr>`;
@@ -117,17 +121,14 @@
             let algneSumma = 0;
             let ümardatudSumma = 0;
 
-            // Käime lasud 1 kuni 5 läbi
             for (let i = 1; i <= 5; i++) {
-                let väärtus = lasud[i] !== undefined ? lasud[i] : "-";
-                let ümardatud = lasud[i] !== undefined ? Math.floor(lasud[i]) : "-";
+                let väärtus = lasud[i] !== undefined ? lasud[i] : 0;
+                let ümardatud = lasud[i] !== undefined ? Math.floor(lasud[i]) : 0;
                 
-                if (lasud[i] !== undefined) {
-                    algneSumma += väärtus;
-                    ümardatudSumma += ümardatud;
-                }
+                algneSumma += väärtus;
+                ümardatudSumma += ümardatud;
 
-                tabeliHtml += `<tr><td>${i}. lask</td><td>${väärtus}</td><td><strong>${ümardatud}</strong></td></tr>`;
+                tabeliHtml += `<tr><td>${i}. lask</td><td>${väärtus > 0 ? väärtus.toFixed(1) : '-'}</td><td><strong>${väärtus > 0 ? ümardatud : '-'}</strong></td></tr>`;
             }
 
             tabeliHtml += `<tr class="total-row"><td>KOKKU</td><td>${algneSumma.toFixed(1)}</td><td>${ümardatudSumma}</td></tr>`;
@@ -135,7 +136,7 @@
             
             tableOutput.innerHTML = tabeliHtml;
         } else {
-            tableOutput.innerHTML = "<p style='color:red;'>Tabeli formaati ei suudetud tuvastada. Proovi teha ekraanist otsem ja lähemalt pilti, et ainult parempoolne tabel jääks kaadrisse.</p>";
+            tableOutput.innerHTML = "<p style='color:red;'>Tulemusi ei suudetud automaatselt tabelisse panna. Proovi teha pilti otse mustvalge tabeli lähedalt.</p>";
         }
     }
 </script>
