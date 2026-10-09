@@ -3,132 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lasketulemuste Tuvastaja v1.3</title>
-    <!-- Kasutame Sinu üleslaetud kohalikku teeki -->
+    <title>Lasketulemuste Tuvastaja v1.4</title>
+    <!-- Kohalik teek -->
     <script src="tesseract.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .version-tag { font-size: 0.85em; color: #777; background: #eaeaea; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 15px; }
-        #preview { max-width: 100%; margin-top: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        #preview, #croppedCanvas { max-width: 100%; margin-top: 10px; border: 1px solid #ccc; border-radius: 4px; display: block; }
         #status { font-weight: bold; color: #0066cc; margin: 15px 0; }
         .result-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         .result-table th, .result-table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         .result-table th { background-color: #4CAF50; color: white; }
         .result-table tr:nth-child(even) { background-color: #f2f2f2; }
         .total-row { font-weight: bold; background-color: #eef9f3 !important; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>Lasketulemuste pildituvastus</h2>
-    <!-- Versioonitähis, et näha brauseris kohe, milline kood töötab -->
-    <div class="version-tag">Rakenduse versioon: v1.3 (Parandatud tabeli filter)</div>
+    <div class="version-tag">Rakenduse versioon: v1.4 (Automaatne tabeli kärpimine)</div>
     
     <br>
     <input type="file" id="imageInput" accept="image/*">
     <div id="status">Ootan lasketulemuste pilti...</div>
 
-    <h3>Eelvaade:</h3>
-    <img id="preview" src="#" alt="Eelvaade" style="display:none;">
+    <div class="hidden">
+        <!-- Taustal olev lõuend pildi kärpimiseks -->
+        <canvas id="sourceCanvas"></canvas>
+    </div>
+
+    <h3>Tuvastatav tabeliosa (Koodi poolt välja lõigatud):</h3>
+    <canvas id="croppedCanvas"></canvas>
 
     <h3>Tuvastatud lasketulemused:</h3>
-    <div id="tableOutput">Tulemused ilmuvad siia pärast pildi valimist...</div>
+    <div id="tableOutput">Tulemused ilmuvad siia...</div>
 </div>
 
 <script>
     const imageInput = document.getElementById('imageInput');
-    const preview = document.getElementById('preview');
+    const sourceCanvas = document.getElementById('sourceCanvas');
+    const croppedCanvas = document.getElementById('croppedCanvas');
     const statusDiv = document.getElementById('status');
     const tableOutput = document.getElementById('tableOutput');
 
-    imageInput.addEventListener('change', async function(event) {
+    imageInput.addEventListener('change', function(event) {
         const file = event.target.files[0];
         if (!file) return;
 
-        preview.src = URL.createObjectURL(file);
-        preview.style.display = 'block';
-
-        statusDiv.innerText = "Analüüsin lasketabelit... Palun oota.";
+        statusDiv.innerText = "Valmistun pildi kärpimiseks...";
         tableOutput.innerHTML = "Töötlen...";
 
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        
+        img.onload = async function() {
+            // 1. Joonistame algse pildi taustalõuendile
+            const srcCtx = sourceCanvas.getContext('2d');
+            sourceCanvas.width = img.width;
+            sourceCanvas.height = img.height;
+            srcCtx.drawImage(img, 0, 0);
+
+            // 2. KÄRPIMISE LOOGIKA: Kongsbergi ekraanil asub tulemuste tabel üleval paremas nurgas.
+            // Võtame pildi laiusest viimase 40% (parem serv) ja kõrgusest esimese 45% (ülemine pool)
+            const cropX = img.width * 0.60; 
+            const cropY = img.height * 0.05;
+            const cropWidth = img.width * 0.38;
+            const cropHeight = img.height * 0.45;
+
+            // Seadistame nähtava lõuendi suuruse lõigatud tüki järgi
+            croppedCanvas.width = cropWidth;
+            croppedCanvas.height = cropHeight;
+            const cropCtx = croppedCanvas.getContext('2d');
+            
+            // Lõikame tabeli välja ja joonistame selle ekraanile
+            cropCtx.drawImage(sourceCanvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+
+            statusDiv.innerText = "Tabel välja lõigatud! Käivitan tekstituvastuse ainult tabelist...";
+
+            // 3. SAADAME TESSERACTILE AINULT KÄRPITUD TABELIPIIRKONNA
+            KäivitaTuvastus(croppedCanvas);
+        };
+    });
+
+    async function KäivitaTuvastus(canvasElement) {
         try {
-            // Käivitame töötaja Sinu GitHubi üleslaetud abifailidega
             const worker = await Tesseract.createWorker('eng', 1, {
                 workerPath: './worker.min.js',
                 langPath: '.',
                 cacheMethod: 'none'
             });
 
-            // Lubame ainult numbreid ja kirjavahemärke, et tekstiprügi eemaldada
+            // Lubame ainult numbreid ja punkte, et välistada ekraani nurkadest tulevat tekstiprügi
             await worker.setParameters({
-                tessedit_char_whitelist: '0123456789., \n'
+                tessedit_char_whitelist: '0123456789.\n '
             });
 
-            const { data: { text } } = await worker.recognize(file);
+            // Tuvastame teksti otse canvas elemendilt
+            const { data: { text } } = await worker.recognize(canvasElement);
             await worker.terminate();
 
             statusDiv.innerText = "Tuvastamine edukalt lõpetatud!";
-            TöötleTekst(text);
+            TöötleTabeliTekst(text);
 
         } catch (error) {
             statusDiv.innerText = "Viga tuvastamisel!";
             tableOutput.innerText = error.message;
         }
-    });
+    }
 
-    function TöötleTekst(toorTekst) {
-        const read = toorTekst.split('\n');
-        let lasud = {};
+    function TöötleTabeliTekst(toorTekst) {
+        // Otsime tekstist kõiki kümnendmurde (nt 9.6, 5.6 jne)
+        const leitudNumbrid = toorTekst.match(/[0-9]\s*[.,]\s*[0-9]/g) || [];
         
-        // Rangem filter: rida peab algama numbriga 1-5, millele järgneb tühik ja kümnendmurd (nt 9.6)
-        const tabeliMuster = /^\s*([1-5])\s+([0-9][.,][0-9])/;
-
-        read.forEach(rida => {
-            const vaste = rida.trim().match(tabeliMuster);
-            if (vaste) {
-                const lasuNr = parseInt(vaste[1]);
-                const tulemus = parseFloat(vaste[2].replace(',', '.'));
-                // Kontrollime, et punktid jääksid reaalsuse piiridesse
-                if (tulemus <= 11.0) {
-                    lasud[lasuNr] = tulemus;
-                }
+        let puhastatudTulemused = [];
+        leitudNumbrid.forEach(num => {
+            // Eemaldame võimalikud tühikud, mis OCR võib punkti vahele jätta (nt "9 . 6")
+            const puhasArv = parseFloat(num.replace(/\s+/g, '').replace(',', '.'));
+            if (puhasArv <= 10.9 && puhasArv >= 0.0) {
+                puhastatudTulemused.push(puhasArv);
             }
         });
 
-        // Alternatiivne leidja juhuks, kui tabeli struktuur sai viga, kuid numbrid on olemas
-        if (Object.keys(lasud).length === 0) {
-            const koikKümnendmurrud = toorTekst.match(/[0-9][.,][0-9]/g);
-            if (koikKümnendmurrud) {
-                let loendur = 1;
-                koikKümnendmurrud.forEach(num => {
-                    const väärtus = parseFloat(num.replace(',', '.'));
-                    // Välistame lehe all nurgas olevad liiga suured numbrid (nt distantsid või koordinaadid)
-                    if (väärtus <= 10.9 && loendur <= 5) {
-                        lasud[loendur] = väärtus;
-                        loendur++;
-                    }
-                });
-            }
-        }
+        // Kuna lõikasime välja ainult tabeli, on esimesed 5 leitud numbrit garanteeritult Sinu lasud!
+        const lõplikudLasud = puhastatudTulemused.slice(0, 5);
 
-        // Koostame ilusa HTML tabeli
-        if (Object.keys(lasud).length > 0) {
+        if (lõplikudLasud.length > 0) {
             let tabeliHtml = `<table class="result-table">
                 <tr><th>Lasu nr</th><th>Algne tulemus</th><th>Ümardatud (allapoole)</th></tr>`;
             
             let algneSumma = 0;
             let ümardatudSumma = 0;
 
-            for (let i = 1; i <= 5; i++) {
-                let väärtus = lasud[i] !== undefined ? lasud[i] : 0;
-                let ümardatud = lasud[i] !== undefined ? Math.floor(lasud[i]) : 0;
+            for (let i = 0; i < 5; i++) {
+                let väärtus = lõplikudLasud[i];
+                let olemas = väärtus !== undefined;
+                let ümardatud = olemas ? Math.floor(väärtus) : 0;
                 
-                algneSumma += väärtus;
-                ümardatudSumma += ümardatud;
+                if (olemas) {
+                    algneSumma += väärtus;
+                    ümardatudSumma += ümardatud;
+                }
 
-                tabeliHtml += `<tr><td>${i}. lask</td><td>${väärtus > 0 ? väärtus.toFixed(1) : '-'}</td><td><strong>${väärtus > 0 ? ümardatud : '-'}</strong></td></tr>`;
+                tabeliHtml += `<tr>
+                    <td>${i + 1}. lask</td>
+                    <td>${olemas ? väärtus.toFixed(1) : '-'}</td>
+                    <td><strong>${olemas ? ümardatud : '-'}</strong></td>
+                </tr>`;
             }
 
             tabeliHtml += `<tr class="total-row"><td>KOKKU</td><td>${algneSumma.toFixed(1)}</td><td>${ümardatudSumma}</td></tr>`;
@@ -136,7 +159,7 @@
             
             tableOutput.innerHTML = tabeliHtml;
         } else {
-            tableOutput.innerHTML = "<p style='color:red;'>Tulemusi ei suudetud automaatselt tabelisse panna. Proovi teha pilti otse mustvalge tabeli lähedalt.</p>";
+            tableOutput.innerHTML = "<p style='color:red;'>Kärbitud pildilt ei leitud numbreid. Veendu, et pildistad otse ekraani eest, nii et tulemuste tabel jääks paremale üles nurka.</p>";
         }
     }
 </script>
