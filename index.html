@@ -3,150 +3,140 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lasketulemuste Arvutaja v1.8</title>
+    <title>AI Ühenduse Test v2.6</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 15px; background-color: #f4f7f6; color: #333; display: flex; justify-content: center; }
-        .container { width: 100%; max-width: 480px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); box-sizing: border-box; }
-        .version-tag { font-size: 0.8em; color: #777; background: #eaeaea; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 15px; }
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .version-tag { font-size: 0.85em; color: #777; background: #eaeaea; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 15px; }
+        .key-section { background: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        input[type="text"] { width: 100%; padding: 8px; box-sizing: border-box; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
+        .btn { background: #28a745; color: white; border: none; padding: 12px 20px; font-size: 1.1em; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 10px; font-weight: bold; }
+        .btn:hover { background: #218838; }
         
-        /* Klaviatuuri disain mobiilile */
-        .keyboard { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
-        .key { background: #e9ecef; border: none; padding: 18px; font-size: 1.4em; font-weight: bold; border-radius: 8px; cursor: pointer; text-align: center; -webkit-tap-highlight-color: transparent; }
-        .key:active { background: #ced4da; }
-        .key.clear { background: #f8d7da; color: #721c24; }
-        .key.clear:active { background: #f5c6cb; }
-        
-        /* Tabeli disain */
-        .result-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 1.05em; }
-        .result-table th, .result-table td { border: 1px solid #ddd; padding: 10px; text-align: center; }
-        .result-table th { background-color: #4CAF50; color: white; }
-        .result-table tr:nth-child(even) { background-color: #f9f9f9; }
-        .total-row { font-weight: bold; background-color: #eef9f3 !important; font-size: 1.1em; }
-        
-        .input-preview { font-size: 1.1em; margin: 10px 0; font-weight: bold; color: #0066cc; min-height: 24px; text-align: center; }
+        /* Visuaalne konsool silumiseks */
+        .console-box { background: #1e1e1e; color: #39ff14; font-family: monospace; padding: 15px; border-radius: 6px; margin-top: 25px; max-height: 250px; overflow-y: auto; white-space: pre-wrap; box-shadow: inset 0 0 10px #000; }
+        .log-error { color: #ff3333; }
+        .log-success { color: #00ffffff; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Lasketulemuste sisestaja</h2>
-    <div class="version-tag">Versioon: v1.8 (Kiirklaviatuur - 100% Töökindel)</div>
+    <h2>AI Ühenduse Test (Lihtne Tekst)</h2>
+    <div class="version-tag">Rakenduse versioon: v2.6 (Diagnostika & Konsool)</div>
     
-    <!-- Kuvab pooleliolevat sisestust (nt "Hetkel sisestamisel: 9.") -->
-    <div id="inputPreview" class="input-preview">Alusta sisestamist numbritest...</div>
-
-    <!-- TULEMUSTE TABEL -->
-    <table class="result-table">
-        <thead>
-            <tr>
-                <th>Lasu nr</th>
-                <th>Algne</th>
-                <th>Ümardatud (⬇)</th>
-            </tr>
-        </thead>
-        <tbody id="tableBody">
-            <!-- Täidetakse dünaamiliselt JavaScriptiga -->
-        </tbody>
-    </table>
-
-    <!-- LASKURI SPETSIAALNE SÕRMISTIK -->
-    <div class="keyboard">
-        <button class="key" onclick="lisaNumber(7)">7</button>
-        <button class="key" onclick="lisaNumber(8)">8</button>
-        <button class="key" onclick="lisaNumber(9)">9</button>
-        <button class="key" onclick="lisaNumber(4)">4</button>
-        <button class="key" onclick="lisaNumber(5)">5</button>
-        <button class="key" onclick="lisaNumber(6)">6</button>
-        <button class="key" onclick="lisaNumber(1)">1</button>
-        <button class="key" onclick="lisaNumber(2)">2</button>
-        <button class="key" onclick="lisaNumber(3)">3</button>
-        <button class="key clear" onclick="kustutaViimane()">C</button>
-        <button class="key" onclick="lisaNumber(0)">0</button>
-        <button class="key clear" onclick="tühjendaKõik()">Reset</button>
+    <!-- VÕTME SISSESTAMISE OSA -->
+    <div class="key-section">
+        <label style="font-weight: bold;">Sisesta oma Hugging Face tasuta võti (alustab 'hf_...'):</label>
+        <input type="text" id="apiKeyInput" placeholder="hf_...">
     </div>
+
+    <p>See nupp ei vaja pilti. Saame teada, kas andmed liiguvad arvutist serverisse ja kas võti töötab.</p>
+    <button id="testBtn" class="btn">Käivita ühenduse test</button>
+
+    <h3>Koodi samm-sammuline konsool (Silumine):</h3>
+    <div id="consoleOutput" class="console-box">[Süsteem] Ootan testi käivitamist...</div>
 </div>
 
 <script>
-    let sisestatudNumbrid = []; // Hoiab kõiki vajutatud nuppe järjest (nt [9, 6, 5, 6...])
-    
-    // Uuendab ekraanil olevat tabelit ja summasid reaalajas
-    function uuendaVaadet() {
-        const tableBody = document.getElementById('tableBody');
-        const inputPreview = document.getElementById('inputPreview');
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const testBtn = document.getElementById('testBtn');
+    const consoleOutput = document.getElementById('consoleOutput');
+
+    // Abifunktsioon konsooli kirjutamiseks
+    function logi(tekst, tyyp = 'info') {
+        const aeg = new Date().toLocaleTimeString();
+        let klass = '';
+        if (tyyp === 'error') klass = 'class="log-error"';
+        if (tyyp === 'success') klass = 'class="log-success"';
         
-        let lasud = [];
-        // Grupeerime numbrid kahe kaupa lasketulemusteks (nt 9 ja 6 -> 9.6)
-        for (let i = 0; i < sisestatudNumbrid.length; i += 2) {
-            let täisosa = sisestatudNumbrid[i];
-            let kümnendik = sisestatudNumbrid[i+1];
-            
-            if (kümnendik !== undefined) {
-                lasud.push(parseFloat(`${täisosa}.${kümnendik}`));
+        consoleOutput.innerHTML += `<div ${klass}>[${aeg}] ${tekst}</div>`;
+        consoleOutput.scrollTop = consoleOutput.scrollHeight; // Keri alati alla
+    }
+
+    // Laadime võtme mälust
+    if (localStorage.getItem('hf_api_key')) {
+        apiKeyInput.value = localStorage.getItem('hf_api_key');
+        logi("Võti laeti seadme mälust edukalt.");
+    }
+
+    apiKeyInput.addEventListener('input', () => {
+        localStorage.setItem('hf_api_key', apiKeyInput.value.trim());
+    });
+
+    testBtn.addEventListener('click', async function() {
+        const apiKey = apiKeyInput.value.trim();
+        
+        consoleOutput.innerHTML = ""; // Puhastame konsooli uueks testiks
+        logi("Test käivitatud kasutaja poolt.");
+
+        if (!apiKey) {
+            logi("VIGA: Päring peatati, sest võtme kast on tühi!", "error");
+            return;
+        }
+
+        logi(`Kontrollin võtit... Algab sümbolitega: "${apiKey.substring(0, 7)}..."`);
+        logi("Valmistun veebipäringuks (Fetch)...");
+        logi("Sihtkoht: https://huggingface.co");
+
+        // Paneme kokku Sinu küsitud lihtsa andmejada (puhta teksti formaat)
+        const andmed = {
+            model: "microsoft/Phi-3.5-vision-instruct",
+            messages: [
+                {
+                    role: "user",
+                    content: "Hello! This is a connection test from a local HTML file. Please respond with exactly one word: KORRAS."
+                }
+            ],
+            max_tokens: 10
+        };
+
+        logi("Andmeplokk (JSON) kokku pandud. Päring teele saadetud...");
+
+        try {
+            const response = await fetch("https://huggingface.co", {
+                method: "POST",
+                headers: { 
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(andmed)
+            });
+
+            logi(`Server vastas! HTTP staatuse kood: ${response.status} (${response.statusText})`);
+
+            if (!response.ok) {
+                logi(`Server lükkas päringu tagasi (Staatuse kood ei ole 200).`, "error");
+            }
+
+            logi("Hakkan serveri vastust (JSON-i) lahti pakkima...");
+            const result = await response.json();
+            logi("Andmed lahti pakitud. Analüüsin sisu...");
+
+            if (result.error) {
+                logi(`AI SERVERI SISAMINE VIGA: ${JSON.stringify(result.error)}`, "error");
+                return;
+            }
+
+            if (result.choices && result.choices[0] && result.choices[0].message) {
+                const aiVastus = result.choices[0].message.content.trim();
+                logi(`AI VASTAS: "${aiVastus}"`, "success");
+                
+                if (aiVastus.toUpperCase().includes("KORRAS")) {
+                    logi("TEST ÕNNESTUS 100%! Sinu arvuti saab pilveserveriga ametlikult ühendust.", "success");
+                } else {
+                    logi("Side toimib, kuid AI saatis oodatust erineva teksti.", "info");
+                }
             } else {
-                // Kui kümnendikku veel pole, kuvame eelvaates, et sisestamine on pooleli
-                inputPreview.innerText = `Lask ${lasud.length + 1} pooleli: ${täisosa}.`;
-            }
-        }
-
-        if (sisestatudNumbrid.length % 2 === 0) {
-            inputPreview.innerText = lasud.length >= 5 ? "Kõik 5 lasku sisestatud!" : "Sisesta järgmine lask...";
-        }
-
-        // Genereerime tabeli read 1 kuni 5 jaoks
-        let html = '';
-        let algneSumma = 0;
-        let ümardatudSumma = 0;
-
-        for (let i = 0; i < 5; i++) {
-            let väärtus = lasud[i];
-            let olemas = väärtus !== undefined;
-            let ümardatud = olemas ? Math.floor(väärtus) : 0;
-
-            if (olemas) {
-                algneSumma += väärtus;
-                ümardatudSumma += ümardatud;
+                logi(`Vastuse struktuur oli ootamatu: ${JSON.stringify(result)}`, "error");
             }
 
-            html += `<tr>
-                <td><strong>${i + 1}. lask</strong></td>
-                <td>${olemas ? väärtus.toFixed(1) : '-'}</td>
-                <td><strong>${olemas ? ümardatud : '-'}</strong></td>
-            </tr>`;
+        } catch (error) {
+            logi("KRIITILINE TÕRGE: Päring katkes enne serverini jõudmist või brauser blokeeris selle!", "error");
+            logi(`Vea täpne tehniline kirjeldus: "${error.message}"`, "error");
+            logi("Kui siin on kirjas 'Failed to fetch', siis brauseris on endiselt aktiivne sisemine blokeering või internet puudub.", "error");
         }
-
-        // Lisame kokkuvõtte rea
-        html += `<tr class="total-row">
-            <td>KOKKU</td>
-            <td>${algneSumma > 0 ? algneSumma.toFixed(1) : '-'}</td>
-            <td>${ümardatudSumma > 0 ? ümardatudSumma : '-'}</td>
-        </tr>`;
-
-        tableBody.innerHTML = html;
-    }
-
-    // Kui vajutatakse numbriklahvi
-    function lisaNumber(nr) {
-        // Lubame sisestada maksimaalselt 5 lasku (ehk 10 numbrit kokku)
-        if (sisestatudNumbrid.length < 10) {
-            sisestatudNumbrid.push(nr);
-            uuendaVaadet();
-        }
-    }
-
-    // Kustutab viimati sisestatud ühe numbri (C nupp)
-    function kustutaViimane() {
-        sisestatudNumbrid.pop();
-        uuendaVaadet();
-    }
-
-    // Kustutab terve tabeli tühjaks (Reset nupp)
-    function tühjendaKõik() {
-        sisestatudNumbrid = [];
-        uuendaVaadet();
-    }
-
-    // Käivitame tühja tabeli lehe laadimisel
-    uuendaVaadet();
+    });
 </script>
 
 </body>
